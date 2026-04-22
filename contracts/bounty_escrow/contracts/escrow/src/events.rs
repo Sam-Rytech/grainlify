@@ -1490,3 +1490,22 @@ pub fn emit_max_batch_size_updated(env: &Env, event: MaxBatchSizeUpdated) {
     let topics = (symbol_short!("b_cap_up"),);
     env.events().publish(topics, event);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FEE ROUTING EVENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeRoutingUpdated {
+    pub version: u32,
+    pub admin: Address,
+    pub destination: Address,
+    pub fee_bips: u32,
+    pub timestamp: u64,
+}
+
+pub fn emit_fee_routing_updated(env: &Env, event: FeeRoutingUpdated) {
+    let topics = (symbol_short!("fee_cfg"),);
+    env.events().publish(topics, event);
+}

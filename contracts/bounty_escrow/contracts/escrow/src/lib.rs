@@ -5684,6 +5684,85 @@ impl BountyEscrowContract {
             .get(&symbol_short!("max_batch"))
             .unwrap_or(Self::DEFAULT_MAX_BATCH_SIZE)
     }
+
+    // ============================================================================
+    // FEE ROUTING INVARIANTS
+    // ============================================================================
+
+    #[contracttype]
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct FeeRoutingConfig {
+        pub destination: Address,
+        pub fee_bips: u32, // Basis points (100 = 1%)
+    }
+
+    const MAX_FEE_BIPS: u32 = 10000; // 100%
+
+    /// Configures the global fee routing destination and percentage.
+    pub fn set_fee_routing(
+        env: Env,
+        destination: Address,
+        fee_bips: u32,
+    ) -> Result<(), Error> {
+        let admin = rbac::require_admin(&env);
+        admin.require_auth();
+
+        // Prevent setting a fee > 100%
+        if fee_bips > Self::MAX_FEE_BIPS {
+            return Err(Error::InvalidAmount); 
+        }
+
+        let config = FeeRoutingConfig { destination, fee_bips };
+        
+        // Upgrade-safe instance storage
+        env.storage().instance().set(&symbol_short!("fee_cfg"), &config);
+
+        events::emit_fee_routing_updated(
+            &env,
+            events::FeeRoutingUpdated {
+                version: events::EVENT_VERSION_V2,
+                admin,
+                destination: config.destination,
+                fee_bips: config.fee_bips,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
+    /// View: Gets the current fee routing configuration.
+    pub fn get_fee_routing(env: Env) -> Option<FeeRoutingConfig> {
+        env.storage().instance().get(&symbol_short!("fee_cfg"))
+    }
+
+    /// Helper: Calculates fee and payout, strictly enforcing the invariant: fee + payout == total.
+    pub fn calculate_fee_routing(env: Env, total_amount: i128) -> Result<(i128, i128, Option<Address>), Error> {
+        if total_amount < 0 {
+            return Err(Error::InvalidAmount);
+        }
+        
+        if let Some(cfg) = Self::get_fee_routing(env.clone()) {
+            if cfg.fee_bips == 0 {
+                return Ok((0, total_amount, Some(cfg.destination)));
+            }
+            
+            // Calculate fee using integer math: (total * bips) / 10000
+            // Using u128 for intermediate calculation to prevent overflow
+            let fee = ((total_amount as u128 * cfg.fee_bips as u128) / Self::MAX_FEE_BIPS as u128) as i128;
+            let payout = total_amount.checked_sub(fee).ok_or(Error::InvalidAmount)?;
+            
+            // INVARIANT CHECK: The sum of the split must exactly equal the initial total amount
+            if fee + payout != total_amount {
+                panic!("CRITICAL: Fee routing invariant violated");
+            }
+            
+            Ok((fee, payout, Some(cfg.destination)))
+        } else {
+            // No fee configured, 100% payout
+            Ok((0, total_amount, None))
+        }
+    }
 }
 impl traits::EscrowInterface for BountyEscrowContract {
     /// Lock funds for a bounty through the trait interface

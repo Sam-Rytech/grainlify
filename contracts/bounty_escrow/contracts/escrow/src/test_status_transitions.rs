@@ -710,3 +710,67 @@ fn test_batch_lock_fails_when_exceeding_dynamic_cap() {
     // Attempting to batch lock 2 items when the cap is 1 should panic
     setup.escrow.batch_lock_funds(&items);
 }
+
+// ============================================================================
+// FEE ROUTING INVARIANTS TESTS
+// ============================================================================
+
+#[test]
+fn test_fee_routing_invariant_calculation() {
+    let setup = TestSetup::new();
+    let destination = Address::generate(&setup.env);
+    
+    // Set fee to 2.5% (250 bips)
+    setup.escrow.set_fee_routing(&destination, &250);
+    
+    let config = setup.escrow.get_fee_routing().unwrap();
+    assert_eq!(config.fee_bips, 250);
+    assert_eq!(config.destination, destination.clone());
+
+    // Calculate for 100,000 tokens. 2.5% should be 2,500. Payout 97,500.
+    let (fee, payout, dest_opt) = setup.escrow.calculate_fee_routing(&100_000);
+    assert_eq!(fee, 2500);
+    assert_eq!(payout, 97500);
+    assert_eq!(dest_opt.unwrap(), destination);
+    
+    // Validate invariant
+    assert_eq!(fee + payout, 100_000);
+}
+
+#[test]
+fn test_fee_routing_no_config() {
+    let setup = TestSetup::new();
+    let (fee, payout, dest_opt) = setup.escrow.calculate_fee_routing(&100_000);
+    
+    assert_eq!(fee, 0);
+    assert_eq!(payout, 100_000);
+    assert!(dest_opt.is_none());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #13)")] // InvalidAmount
+fn test_fee_routing_exceeds_max_bips() {
+    let setup = TestSetup::new();
+    let destination = Address::generate(&setup.env);
+    
+    // Cannot set more than 10000 bips (100%)
+    setup.escrow.set_fee_routing(&destination, &10001);
+}
+
+#[test]
+fn test_fee_routing_rounding_safety() {
+    let setup = TestSetup::new();
+    let destination = Address::generate(&setup.env);
+    
+    // Set fee to 3.33% (333 bips)
+    setup.escrow.set_fee_routing(&destination, &333);
+    
+    // Calculate for an odd/small amount like 10 tokens. 
+    // (10 * 333) / 10000 = 0.333 -> should safely round to 0 fee.
+    let (fee, payout, _) = setup.escrow.calculate_fee_routing(&10);
+    assert_eq!(fee, 0);
+    assert_eq!(payout, 10);
+    
+    // The core invariant must still hold
+    assert_eq!(fee + payout, 10);
+}

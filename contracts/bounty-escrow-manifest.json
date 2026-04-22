@@ -557,6 +557,26 @@
         "authorization": "any",
         "pausable": false,
         "gas_estimate": "low"
+      },
+      {
+        "name": "get_fee_routing",
+        "description": "View protocol fee routing configuration",
+        "parameters": [],
+        "returns": { "type": "Option<FeeRoutingConfig>" },
+        "authorization": "any",
+        "pausable": false,
+        "gas_estimate": "low"
+      },
+      {
+        "name": "calculate_fee_routing",
+        "description": "Calculate fee and payout for a given amount, enforcing invariants",
+        "parameters": [
+          { "name": "total_amount", "type": "i128" }
+        ],
+        "returns": { "type": "Result<(i128, i128, Option<Address>), Error>" },
+        "authorization": "any",
+        "pausable": false,
+        "gas_estimate": "low"
       }
     ],
     "admin": [
@@ -832,6 +852,18 @@
         "description": "Configure the maximum allowed items in batch operations",
         "parameters": [
           { "name": "new_size", "type": "u32", "description": "New maximum batch size" }
+        ],
+        "returns": { "type": "()", "description": "Empty on success" },
+        "authorization": "admin",
+        "pausable": false,
+        "gas_estimate": "low"
+      },
+      {
+        "name": "set_fee_routing",
+        "description": "Configure the protocol fee destination and percentage",
+        "parameters": [
+          { "name": "destination", "type": "Address", "description": "Address to receive protocol fees" },
+          { "name": "fee_bips", "type": "u32", "description": "Fee percentage in basis points (100 = 1%)" }
         ],
         "returns": { "type": "()", "description": "Empty on success" },
         "authorization": "admin",
